@@ -7,4 +7,6 @@ public class MachineStateDto
 
     [JsonPropertyName("state")]
     public string State { get; set; }
+    [JsonPropertyName("price")]
+    public decimal? Price { get; set; }
 }

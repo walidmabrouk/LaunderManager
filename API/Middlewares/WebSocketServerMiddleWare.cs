@@ -63,27 +63,50 @@ public class WebSocketServerMiddleWare
     {
         try
         {
-            Console.WriteLine($"[ProcessMessageAsync] Received raw message: {message}");
-
+            // Désérialiser le message reçu
             var data = JsonSerializer.Deserialize<MachineStateDto>(message);
 
-            if (data == null || data.MachineId <= 0 || string.IsNullOrEmpty(data.State))
+            if (data != null)
             {
-                Console.WriteLine("[ProcessMessageAsync] Invalid deserialized data.");
-                await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Invalid message format", CancellationToken.None);
-                return;
+                // Vérifier le type de message
+                if (data.State == "Running")
+                {
+                    // Démarrage de la machine
+                    await machineService.UpdateMachineStateAsync(data.MachineId, "Running");
+                    await webSocketService.BroadcastMessageAsync($"Machine {data.MachineId} started");
+                    Console.WriteLine($"Machine {data.MachineId} started, state set to Running.");
+                }
+                else if (data.State == "Stopped")
+                {
+                    // Arrêt de la machine (ajouter les gains)
+                    await machineService.UpdateMachineStateAsync(data.MachineId, "Stopped");
+
+                    // Si vous avez un champ "price" dans l'objet reçu, vous pouvez l'utiliser
+                    if (data.Price.HasValue)
+                    {
+                        await machineService.AddCycleEarningsAsync(data.MachineId, data.Price.Value);
+                        await webSocketService.BroadcastMessageAsync($"Machine {data.MachineId} stopped, earnings added.");
+                        Console.WriteLine($"Machine {data.MachineId} stopped, added earnings: {data.Price}");
+                    }
+                    else
+                    {
+                        // Cas où le prix n'est pas passé (vous pouvez définir un comportement par défaut ici)
+                        await webSocketService.BroadcastMessageAsync($"Machine {data.MachineId} stopped, no earnings specified.");
+                        Console.WriteLine($"Machine {data.MachineId} stopped, no earnings specified.");
+                    }
+                }
+                else
+                {
+                    await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Invalid state", CancellationToken.None);
+                }
             }
-
-            Console.WriteLine($"[ProcessMessageAsync] Valid data: MachineId={data.MachineId}, State={data.State}");
-            await machineService.UpdateMachineStateAsync(data.MachineId, data.State);
-
-            await webSocketService.BroadcastMessageAsync(message);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ProcessMessageAsync] Exception: {ex.Message}");
             await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Error processing message", CancellationToken.None);
+            Console.Error.WriteLine($"Error processing WebSocket message: {ex.Message}");
         }
     }
+
 
 }
