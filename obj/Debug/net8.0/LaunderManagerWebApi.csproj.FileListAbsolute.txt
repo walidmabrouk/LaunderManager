@@ -37,3 +37,4 @@ C:\Users\walid\OneDrive\Documents\Visual Studio 2022\Projects\LaunderManagerWebA
 C:\Users\walid\OneDrive\Documents\Visual Studio 2022\Projects\LaunderManagerWebApi\LaunderManagerWebApi\obj\Debug\net8.0\LaunderManagerWebApi.pdb
 C:\Users\walid\OneDrive\Documents\Visual Studio 2022\Projects\LaunderManagerWebApi\LaunderManagerWebApi\obj\Debug\net8.0\LaunderManagerWebApi.genruntimeconfig.cache
 C:\Users\walid\OneDrive\Documents\Visual Studio 2022\Projects\LaunderManagerWebApi\LaunderManagerWebApi\obj\Debug\net8.0\ref\LaunderManagerWebApi.dll
+C:\Users\walid\OneDrive\Documents\Visual Studio 2022\Projects\LaunderManagerWebApi\LaunderManagerWebApi\obj\Debug\net8.0\LaunderManagerWebApi.sourcelink.json

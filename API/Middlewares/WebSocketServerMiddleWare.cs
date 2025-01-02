@@ -1,42 +1,42 @@
 ﻿using System.Net.WebSockets;
+using System.Text.Json;
 using System.Text;
+using Application.Interfaces;
+using LaunderWebApi.Entities;
+using Laundromat.Core.Interfaces;
 
-public class WebSocketServerMiddleware
+public class WebSocketServerMiddleWare
 {
     private readonly RequestDelegate _next;
-    private readonly WebSocketService _connectionManager;
+    private readonly IServiceProvider _serviceProvider;
 
-    public WebSocketServerMiddleware(RequestDelegate next, WebSocketService connectionManager)
+    public WebSocketServerMiddleWare(RequestDelegate next, IServiceProvider serviceProvider)
     {
         _next = next;
-        _connectionManager = connectionManager;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
         if (context.WebSockets.IsWebSocketRequest)
         {
-            WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync();
-            string connID = _connectionManager.AddSocket(webSocket);
-
-            Console.WriteLine($"Socket connected with ID: {connID}");
-
-            await SendMessageAsync(webSocket, $"Connected with ID: {connID}");
-
-            await ReceiveMessageAsync(webSocket, async (result, message) =>
+            using (var scope = _serviceProvider.CreateScope())
             {
-                if (result.MessageType == WebSocketMessageType.Text)
+                var webSocketService = scope.ServiceProvider.GetRequiredService<IWebSocketService>();
+                var machineService = scope.ServiceProvider.GetRequiredService<IMachineService>();
+
+                var socket = await context.WebSockets.AcceptWebSocketAsync();
+                string connectionId = webSocketService.AddSocket(socket);
+
+                try
                 {
-                    string receivedMessage = Encoding.UTF8.GetString(message, 0, result.Count);
-                    Console.WriteLine($"Message received from {connID}: {receivedMessage}");
-                    await SendMessageAsync(webSocket, $"Echo: {receivedMessage}");
+                    await ListenWebSocketAsync(socket, connectionId, webSocketService, machineService);
                 }
-                else if (result.MessageType == WebSocketMessageType.Close)
+                catch
                 {
-                    Console.WriteLine($"WebSocket {connID} is closing.");
-                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by server", CancellationToken.None);
+                    await socket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Error occurred", CancellationToken.None);
                 }
-            });
+            }
         }
         else
         {
@@ -44,26 +44,46 @@ public class WebSocketServerMiddleware
         }
     }
 
-    private async Task SendMessageAsync(WebSocket webSocket, string message)
-    {
-        var buffer = Encoding.UTF8.GetBytes(message);
-        await webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
-    }
-
-    private async Task ReceiveMessageAsync(WebSocket webSocket, Func<WebSocketReceiveResult, byte[], Task> handleMessage)
+    private async Task ListenWebSocketAsync(WebSocket socket, string connectionId, IWebSocketService webSocketService, IMachineService machineService)
     {
         var buffer = new byte[1024 * 4];
 
-        while (webSocket.State == WebSocketState.Open)
+        while (socket.State == WebSocketState.Open)
         {
-            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-
-            await handleMessage(result, buffer);
-
-            if (result.MessageType == WebSocketMessageType.Close)
+            var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+            if (result.MessageType == WebSocketMessageType.Text)
             {
-                break;
+                string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                await ProcessMessageAsync(message, socket, connectionId, webSocketService, machineService);
             }
         }
     }
+
+    private async Task ProcessMessageAsync(string message, WebSocket socket, string connectionId, IWebSocketService webSocketService, IMachineService machineService)
+    {
+        try
+        {
+            Console.WriteLine($"[ProcessMessageAsync] Received raw message: {message}");
+
+            var data = JsonSerializer.Deserialize<MachineStateDto>(message);
+
+            if (data == null || data.MachineId <= 0 || string.IsNullOrEmpty(data.State))
+            {
+                Console.WriteLine("[ProcessMessageAsync] Invalid deserialized data.");
+                await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Invalid message format", CancellationToken.None);
+                return;
+            }
+
+            Console.WriteLine($"[ProcessMessageAsync] Valid data: MachineId={data.MachineId}, State={data.State}");
+            await machineService.UpdateMachineStateAsync(data.MachineId, data.State);
+
+            await webSocketService.BroadcastMessageAsync(message);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ProcessMessageAsync] Exception: {ex.Message}");
+            await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Error processing message", CancellationToken.None);
+        }
+    }
+
 }

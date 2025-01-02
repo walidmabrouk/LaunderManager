@@ -1,5 +1,4 @@
 using Application.Interfaces;
-using Application.Services;
 using Domain.Repositories;
 using Infrastructure.Persistence;
 using LaunderManagerWebApi.API.Middlewares;
@@ -24,7 +23,7 @@ builder.Services.AddSingleton(new DbConnectionManager(connectionString));
 
 // Enregistrer les services existants
 builder.Services.AddScoped<IDaoProprietor, ProprietorDao>();
-builder.Services.AddScoped<IWebSocketService, WebSocketService>();
+builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
 builder.Services.AddScoped<UploadInitialConfigurationUseCase>();
 builder.Services.AddScoped<IMachineRepository, MachineRepository>();
 builder.Services.AddScoped<IMachineService, MachineService>();

@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-
+﻿
 namespace LaunderManagerWebApi.API.Middlewares
 {
     public static class WebSocketMiddlewareExtensions
@@ -12,7 +11,7 @@ namespace LaunderManagerWebApi.API.Middlewares
 
         public static IApplicationBuilder UseWebSocketMiddleware(this IApplicationBuilder builder)
         {
-            return builder.UseMiddleware<WebSocketServerMiddleware>();
+            return builder.UseMiddleware<WebSocketServerMiddleWare>();
         }
     }
 }
