@@ -1,0 +1,6 @@
+@LaunderManagerWebApi_HostAddress = http://localhost:5049
+
+GET {{LaunderManagerWebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
