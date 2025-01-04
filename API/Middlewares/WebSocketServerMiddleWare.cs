@@ -1,167 +1,209 @@
-﻿using System.Net.WebSockets;
-using System.Text.Json;
-using System.Text;
+﻿using LaunderManagerWebApi.Application.Interfaces;
+using LaunderManagerWebApi.Domain.DTOs;
+using LaunderManagerWebApi.Domain.InfrastructureServices;
 using LaunderWebApi.Entities;
 using LaunderWebApi.Infrastructure.Dao;
-using LaunderManagerWebApi.Domain.Services.InfrastructureServices;
-using LaunderManagerWebApi.Application.Interfaces;
-using LaunderManagerWebApi.Domain.InfrastructureServices;
+using System.Net.WebSockets;
+using System.Text.Json;
+using System.Text;
 
-public class WebSocketServerMiddleWare
+public record RequiredServices(
+    IWebSocketService WebSocketService,
+    INotificationService NotificationService,
+    IConfigurationService ConfigurationService);
+
+public sealed class WebSocketServerMiddleware : IAsyncDisposable
 {
+    private const int BUFFER_SIZE = 4 * 1024; // 4KB buffer
     private readonly RequestDelegate _next;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger<WebSocketServerMiddleware> _logger;
 
-    public WebSocketServerMiddleWare(RequestDelegate next, IServiceProvider serviceProvider)
+    public WebSocketServerMiddleware(
+        RequestDelegate next,
+        IServiceProvider serviceProvider,
+        ILogger<WebSocketServerMiddleware> logger)
     {
-        _next = next;
-        _serviceProvider = serviceProvider;
+        _next = next ?? throw new ArgumentNullException(nameof(next));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (context.WebSockets.IsWebSocketRequest)
-        {
-            using (var scope = _serviceProvider.CreateScope())
-            {
-                var webSocketService = scope.ServiceProvider.GetRequiredService<IWebSocketService>();
-                var machineService = scope.ServiceProvider.GetRequiredService<IMachineService>();
-                var proprietorDao = scope.ServiceProvider.GetRequiredService<IDaoProprietor>();
-
-                var socket = await context.WebSockets.AcceptWebSocketAsync();
-                string connectionId = webSocketService.AddSocket(socket);
-
-                try
-                {
-                    await ListenWebSocketAsync(socket, connectionId, webSocketService, machineService, proprietorDao);
-                }
-                catch
-                {
-                    await socket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Error occurred", CancellationToken.None);
-                }
-            }
-        }
-        else
+        if (!context.WebSockets.IsWebSocketRequest)
         {
             await _next(context);
+            return;
+        }
+
+        await HandleWebSocketConnectionAsync(context);
+    }
+
+    private async Task HandleWebSocketConnectionAsync(HttpContext context)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var services = GetRequiredServices(scope);
+
+        var socket = await context.WebSockets.AcceptWebSocketAsync();
+        var connectionId = services.WebSocketService.AddSocket(socket);
+
+        try
+        {
+            await ListenToWebSocketAsync(socket, connectionId, services);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing WebSocket connection");
+            await CloseSocketWithErrorAsync(socket, "Internal server error occurred");
         }
     }
 
-    private async Task ListenWebSocketAsync(
+    private async Task ListenToWebSocketAsync(
         WebSocket socket,
         string connectionId,
-        IWebSocketService webSocketService,
-        IMachineService machineService,
-        IDaoProprietor proprietorDao)
+        RequiredServices services)
     {
-        var buffer = new byte[1024 * 4];
+        var buffer = new byte[BUFFER_SIZE];
+        var receiveResult = await socket.ReceiveAsync(
+            new ArraySegment<byte>(buffer),
+            CancellationToken.None);
 
-        while (socket.State == WebSocketState.Open)
+        while (socket.State == WebSocketState.Open && !receiveResult.CloseStatus.HasValue)
         {
-            var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-            if (result.MessageType == WebSocketMessageType.Text)
+            if (receiveResult.MessageType == WebSocketMessageType.Text)
             {
-                string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                await ProcessMessageAsync(message, socket, connectionId, webSocketService, machineService, proprietorDao);
+                var message = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
+                await ProcessWebSocketMessageAsync(message, socket, services);
             }
+
+            receiveResult = await socket.ReceiveAsync(
+                new ArraySegment<byte>(buffer),
+                CancellationToken.None);
         }
     }
 
-    private async Task ProcessMessageAsync(string message, WebSocket socket, string connectionId, IWebSocketService webSocketService, IMachineService machineService, IDaoProprietor proprietorDao)
+    private async Task ProcessWebSocketMessageAsync(
+        string message,
+        WebSocket socket,
+        RequiredServices services)
     {
         try
         {
-            // Désérialiser le message reçu dans un objet générique
-            var baseMessage = JsonSerializer.Deserialize<BaseMessageDto>(message);
-
-            if (baseMessage == null || string.IsNullOrEmpty(baseMessage.Type))
+            var messageType = GetMessageType(message);
+            if (messageType == null)
             {
-                await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Invalid message format", CancellationToken.None);
+                await CloseSocketWithErrorAsync(socket, "Invalid message format");
                 return;
             }
 
-            // Gestion en fonction du type de message
-            if (baseMessage.Type == "Notification")
-            {
-                // Désérialisation en MachineStateDto pour une notification
-                var notification = JsonSerializer.Deserialize<MachineStatusDto>(message);
-
-                if (notification != null)
-                {
-                    await HandleNotificationAsync(notification, webSocketService, machineService);
-                }
-            }
-            else if (baseMessage.Type == "Configuration")
-            {
-                // Désérialisation en ProprietorDto pour une configuration
-                var configuration = JsonSerializer.Deserialize<Proprietor>(message);
-
-                if (configuration != null)
-                {
-                    await HandleConfigurationAsync(configuration, proprietorDao, webSocketService);
-                }
-            }
-            else
-            {
-                await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Unknown message type", CancellationToken.None);
-            }
+            await HandleMessageByTypeAsync(messageType, message, services);
         }
         catch (Exception ex)
         {
-            await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Error processing message", CancellationToken.None);
-            Console.Error.WriteLine($"Error processing WebSocket message: {ex.Message}");
+            _logger.LogError(ex, "Error processing message: {Message}", message);
+            await CloseSocketWithErrorAsync(socket, "Error processing message");
         }
     }
 
-    // Gestion des notifications
-    private async Task HandleNotificationAsync(MachineStatusDto notification, IWebSocketService webSocketService, IMachineService machineService)
-    {
-        if (notification.State == "Running")
-        {
-            // Démarrage de la machine
-            await machineService.UpdateMachineStateAsync(notification.MachineId, "Running");
-            await webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} started");
-            Console.WriteLine($"Machine {notification.MachineId} started, state set to Running.");
-        }
-        else if (notification.State == "Stopped")
-        {
-            // Arrêt de la machine (ajouter les gains)
-            await machineService.UpdateMachineStateAsync(notification.MachineId, "Stopped");
-
-            if (notification.Price.HasValue)
-            {
-                await machineService.AddCycleEarningsAsync(notification.MachineId, notification.Price.Value);
-                await webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} stopped, earnings added.");
-                Console.WriteLine($"Machine {notification.MachineId} stopped, added earnings: {notification.Price}");
-            }
-            else
-            {
-                await webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} stopped, no earnings specified.");
-                Console.WriteLine($"Machine {notification.MachineId} stopped, no earnings specified.");
-            }
-        }
-        else
-        {
-            Console.WriteLine($"Invalid state for notification: {notification.State}");
-        }
-    }
-
-    // Gestion des configurations
-    private async Task HandleConfigurationAsync(Proprietor configuration, IDaoProprietor proprietorDao, IWebSocketService webSocketService)
+    private static BaseMessageDto? GetMessageType(string message)
     {
         try
         {
-            // Sauvegarde de la configuration dans la base de données via DAO
-            await proprietorDao.AddProprietor(configuration);
+            return JsonSerializer.Deserialize<BaseMessageDto>(message);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
-            // Diffusion de la confirmation via WebSocket
-            Console.WriteLine($"Configuration saved for proprietor: {configuration.Name}");
-            await webSocketService.BroadcastMessageAsync($"Configuration saved for proprietor: {configuration.Name}");
+    private async Task HandleMessageByTypeAsync(
+        BaseMessageDto messageType,
+        string rawMessage,
+        RequiredServices services)
+    {
+        switch (messageType.Type?.ToUpperInvariant())
+        {
+            case "NOTIFICATION":
+                await HandleMachineNotificationAsync(rawMessage, services);
+                break;
+
+            case "CONFIGURATION":
+                await HandleProprietorConfigurationAsync(rawMessage, services);
+                break;
+
+            default:
+                _logger.LogWarning("Unknown message type received: {Type}", messageType.Type);
+                break;
+        }
+    }
+
+    private async Task HandleMachineNotificationAsync(
+        string message,
+        RequiredServices services)
+    {
+        var notification = JsonSerializer.Deserialize<MachineStatusDto>(message);
+        if (notification == null) return;
+
+        await services.NotificationService.ProcessStateChangeAsync(notification);
+    }
+
+    private async Task HandleProprietorConfigurationAsync(
+        string message,
+        RequiredServices services)
+    {
+        var configuration = JsonSerializer.Deserialize<Proprietor>(message);
+        if (configuration == null) return;
+
+        await SaveAndBroadcastConfigurationAsync(configuration, services);
+    }
+
+    private async Task SaveAndBroadcastConfigurationAsync(
+        Proprietor configuration,
+        RequiredServices services)
+    {
+        try
+        {
+            services.ConfigurationService.AddConfigurationAsync(configuration);
+
+            var confirmationMessage = $"Configuration saved for proprietor: {configuration.Name}";
+            _logger.LogInformation(confirmationMessage);
+            await services.WebSocketService.BroadcastMessageAsync(confirmationMessage);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error saving configuration: {ex.Message}");
+            _logger.LogError(ex, "Failed to save configuration for proprietor: {Name}",
+                configuration.Name);
             throw;
         }
     }
+
+    private static async Task CloseSocketWithErrorAsync(
+        WebSocket socket,
+        string message)
+    {
+        if (socket.State == WebSocketState.Open)
+        {
+            await socket.CloseAsync(
+                WebSocketCloseStatus.InvalidPayloadData,
+                message,
+                CancellationToken.None);
+        }
+    }
+
+    private RequiredServices GetRequiredServices(IServiceScope scope)
+    {
+        var provider = scope.ServiceProvider;
+        return new RequiredServices(
+            provider.GetRequiredService<IWebSocketService>(),
+            provider.GetRequiredService<INotificationService>(),
+            provider.GetRequiredService<IConfigurationService>());
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Cleanup code if needed
+    }
 }
+

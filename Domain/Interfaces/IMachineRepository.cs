@@ -6,5 +6,7 @@ namespace LaunderManagerWebApi.Domain.InfrastructureServices
     {
         Task UpdateMachineStateAsync(int machineId, string state);
         Task AddCycleEarningsAsync(int machineId, decimal price);
+        Task<string> GetMachineStateAsync(int machineId);
+        Task<decimal> GetMachineEarningsAsync(int machineId);
     }
 }

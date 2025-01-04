@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using LaunderManagerWebApi.Domain.DTOs;
+using System.Collections.Generic;
 
 namespace LaunderWebApi.Entities
 {

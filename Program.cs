@@ -1,47 +1,66 @@
-using Application.Interfaces;
-using Domain.Repositories;
 using Infrastructure.Persistence;
 using LaunderManagerWebApi.API.Middlewares;
-using LaunderManagerWebApi.Domain.Services.InfrastructureServices;
+using LaunderManagerWebApi.Application.Interfaces;
+using LaunderManagerWebApi.Domain.InfrastructureServices;
 using LaunderWebApi.Infrastructure.Dao;
-using Laundromat.Application.UseCases;
-using Laundromat.Core.Interfaces;
 
-var builder = WebApplication.CreateBuilder(args);
-
-// Ajouter les services au conteneur
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.AddWebSocketMiddleware();
-
-// Ajouter la configuration pour récupérer la chaîne de connexion depuis appsettings.json
-string connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-
-// Enregistrer DbConnectionManager avec la chaîne de connexion
-builder.Services.AddSingleton(new DbConnectionManager(connectionString));
-
-// Enregistrer les services existants
-builder.Services.AddScoped<IDaoProprietor, ProprietorDao>();
-builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
-builder.Services.AddScoped<UploadInitialConfigurationUseCase>();
-builder.Services.AddScoped<IMachineRepository, MachineRepository>();
-builder.Services.AddScoped<IMachineService, MachineService>();
-
-
-var app = builder.Build();
-
-// Configurer le pipeline HTTP
-if (app.Environment.IsDevelopment())
+public class Program
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    public static void Main(string[] args)
+    {
+        var builder = WebApplication.CreateBuilder(args);
+
+        // Services configuration
+        ConfigureServices(builder.Services, builder.Configuration);
+
+        var app = builder.Build();
+
+        // Middleware configuration
+        ConfigureMiddleware(app);
+
+        app.Run();
+    }
+
+    private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddControllers();
+        services.AddEndpointsApiExplorer();
+        services.AddSwaggerGen();
+        services.AddWebSocketMiddleware();
+
+        // Configuration de la base de données
+        string connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+        services.AddSingleton<DbConnectionManager>(sp =>
+            new DbConnectionManager(
+                connectionString,
+                sp.GetRequiredService<ILogger<DbConnectionManager>>()
+            )
+        );
+
+        // Services métier
+        services.AddScoped<IProprietorRepository, ProprietorRepositoryImpl>();
+        services.AddSingleton<IWebSocketService, WebSocketService>();
+        services.AddScoped<IMachineRepository, MachineRepositoryImpl>();
+        services.AddScoped<INotificationService, ManageNotificationUseCase>();
+        services.AddScoped<IConfigurationService, ManageConfigurationUseCase>();
+    }
+
+    private static void ConfigureMiddleware(WebApplication app)
+    {
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI();
+        }
+
+        app.UseWebSockets(new WebSocketOptions
+        {
+            KeepAliveInterval = TimeSpan.FromMinutes(2)
+        });
+        app.UseWebSocketMiddleware();
+        app.UseAuthorization();
+        app.MapControllers();
+    }
 }
-
-
-app.UseWebSockets();
-app.UseWebSocketMiddleware();
-app.UseAuthorization();
-app.MapControllers();
-
-app.Run();

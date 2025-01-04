@@ -1,10 +1,10 @@
-﻿using System.Net.WebSockets;
+﻿using System.Threading.Tasks;
 
 namespace LaunderManagerWebApi.Domain.InfrastructureServices
 {
     public interface IWebSocketService
     {
-        public string AddSocket(WebSocket socket);
+        string AddSocket(System.Net.WebSockets.WebSocket socket);
         Task SendMessageAsync(string connectionId, string message);
         Task BroadcastMessageAsync(string message);
     }

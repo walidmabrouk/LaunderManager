@@ -11,7 +11,7 @@ namespace LaunderManagerWebApi.API.Middlewares
 
         public static IApplicationBuilder UseWebSocketMiddleware(this IApplicationBuilder builder)
         {
-            return builder.UseMiddleware<WebSocketServerMiddleWare>();
+            return builder.UseMiddleware<WebSocketServerMiddleware>();
         }
     }
 }

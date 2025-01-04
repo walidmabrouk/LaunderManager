@@ -1,32 +1,56 @@
-﻿using System;
+﻿using System.Data.SqlClient;
 using System.Data;
-using System.Data.SqlClient;
 
-namespace LaunderWebApi.Infrastructure.Dao
+public class DbConnectionManager : IDisposable
 {
-    public class DbConnectionManager
-    {
-        private readonly string _connectionString;
+    private readonly string _connectionString;
+    private readonly ILogger<DbConnectionManager> _logger;
+    private IDbConnection? _connection;
 
-        public DbConnectionManager(string connectionString)
+    public DbConnectionManager(string connectionString, ILogger<DbConnectionManager> logger)
+    {
+        _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public IDbConnection GetConnection()
+    {
+        if (_connection is { State: ConnectionState.Open })
         {
-            _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            _logger.LogWarning("An existing database connection is already open.");
+            return _connection;
         }
 
-        // Create and open a new database connection
-        public IDbConnection GetConnection()
+        try
         {
-            try
+            _connection = new SqlConnection(_connectionString); // Fixed syntax
+            _connection.Open();
+            _logger.LogInformation("Successfully connected to the database.");
+            return _connection;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to connect to the database.");
+            throw new InvalidOperationException("Failed to connect to the database.", ex);
+        }
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            if (_connection is { State: ConnectionState.Open })
             {
-                var connection = new SqlConnection(_connectionString);
-                connection.Open();
-                Console.WriteLine("connected to database");
-                return connection;
+                _connection.Close();
+                _logger.LogInformation("Database connection closed.");
             }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("Failed to connect to the database.", ex);
-            }
+            _connection?.Dispose();
         }
     }
 }

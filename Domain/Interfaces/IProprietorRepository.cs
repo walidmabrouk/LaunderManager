@@ -1,7 +1,13 @@
-﻿using LaunderWebApi.Entities;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using LaunderWebApi.Entities;
 
-public interface IDaoProprietor
+namespace LaunderWebApi.Infrastructure.Dao
 {
-    Task SaveProprietorAsync(Proprietor proprietor);
+    public interface IProprietorRepository
+    {
+        Task<IEnumerable<Proprietor>> GetAllProprietors();
+        Proprietor GetProprietorById(int id);
+        Task<int> AddProprietor(Proprietor proprietor);
+    }
 }
