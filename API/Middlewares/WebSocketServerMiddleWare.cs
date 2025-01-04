@@ -12,6 +12,7 @@ public record RequiredServices(
     INotificationService NotificationService,
     IConfigurationService ConfigurationService);
 
+
 public sealed class WebSocketServerMiddleware : IAsyncDisposable
 {
     private const int BUFFER_SIZE = 4 * 1024; // 4KB buffer
@@ -156,27 +157,7 @@ public sealed class WebSocketServerMiddleware : IAsyncDisposable
         var configuration = JsonSerializer.Deserialize<Proprietor>(message);
         if (configuration == null) return;
 
-        await SaveAndBroadcastConfigurationAsync(configuration, services);
-    }
-
-    private async Task SaveAndBroadcastConfigurationAsync(
-        Proprietor configuration,
-        RequiredServices services)
-    {
-        try
-        {
-            services.ConfigurationService.AddConfigurationAsync(configuration);
-
-            var confirmationMessage = $"Configuration saved for proprietor: {configuration.Name}";
-            _logger.LogInformation(confirmationMessage);
-            await services.WebSocketService.BroadcastMessageAsync(confirmationMessage);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save configuration for proprietor: {Name}",
-                configuration.Name);
-            throw;
-        }
+        await services.ConfigurationService.SaveAndBroadcastConfigurationAsync(configuration, services);
     }
 
     private static async Task CloseSocketWithErrorAsync(
@@ -206,4 +187,3 @@ public sealed class WebSocketServerMiddleware : IAsyncDisposable
         // Cleanup code if needed
     }
 }
-
