@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using LaunderWebApi.Entities;
@@ -14,13 +15,11 @@ public class ManageConfigurationUseCase : IConfigurationService
         IProprietorRepository proprietorRepository,
         ILogger<ManageConfigurationUseCase> logger)
     {
-        _proprietorRepository = proprietorRepository ??
-            throw new ArgumentNullException(nameof(proprietorRepository));
-        _logger = logger ??
-            throw new ArgumentNullException(nameof(logger));
+        _proprietorRepository = proprietorRepository ?? throw new ArgumentNullException(nameof(proprietorRepository));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<int> AddConfigurationAsync(Proprietor configuration)
+    private async Task<int> AddConfigurationAsync(Proprietor configuration)
     {
         try
         {
@@ -52,14 +51,12 @@ public class ManageConfigurationUseCase : IConfigurationService
         }
     }
 
-    public async Task<IEnumerable<Proprietor>> GetAllConfigurationsAsync()
+    private async Task<IEnumerable<Proprietor>> GetAllConfigurationsAsync()
     {
         try
         {
             var configurations = await _proprietorRepository.GetAllProprietors();
-
             _logger.LogInformation("Retrieved all configurations successfully");
-
             return configurations;
         }
         catch (Exception ex)
@@ -89,6 +86,24 @@ public class ManageConfigurationUseCase : IConfigurationService
         if (configuration.Laundries == null || !configuration.Laundries.Any())
         {
             throw new ArgumentException("At least one laundry is required", nameof(configuration));
+        }
+    }
+
+    public async Task SaveAndBroadcastConfigurationAsync(Proprietor configuration, RequiredServices services)
+    {
+        try
+        {
+            await AddConfigurationAsync(configuration);
+
+            var confirmationMessage = $"Configuration saved for proprietor: {configuration.Name}";
+            _logger.LogInformation(confirmationMessage);
+
+            await services.WebSocketService.BroadcastMessageAsync(confirmationMessage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save configuration for proprietor: {Name}", configuration.Name);
+            throw;
         }
     }
 }
