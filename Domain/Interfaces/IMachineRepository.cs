@@ -1,6 +1,6 @@
 ﻿using System.Threading.Tasks;
 
-namespace Domain.Repositories
+namespace LaunderManagerWebApi.Domain.InfrastructureServices
 {
     public interface IMachineRepository
     {

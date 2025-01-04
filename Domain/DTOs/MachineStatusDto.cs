@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-public class MachineStateDto : BaseMessageDto
+public class MachineStatusDto : BaseMessageDto
 {
     [JsonPropertyName("machineId")]
     public int MachineId { get; set; }

@@ -1,6 +1,6 @@
 ﻿using System.Net.WebSockets;
 
-namespace Laundromat.Core.Interfaces
+namespace LaunderManagerWebApi.Domain.InfrastructureServices
 {
     public interface IWebSocketService
     {

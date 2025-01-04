@@ -1,5 +1,5 @@
 ﻿using Dapper;
-using Domain.Repositories;
+using LaunderManagerWebApi.Domain.InfrastructureServices;
 using LaunderWebApi.Infrastructure.Dao;
 using System.Data;
 using System.Threading.Tasks;

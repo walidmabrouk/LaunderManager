@@ -1,13 +1,13 @@
-﻿using Application.Interfaces;
-using Domain.Repositories;
+﻿using LaunderManagerWebApi.Application.Interfaces;
+using LaunderManagerWebApi.Domain.InfrastructureServices;
 using LaunderWebApi.Infrastructure.Dao;
 using Laundromat.Core.Interfaces;
 
-public class MachineService : IMachineService
+public class ManageMachineUseCase : IMachineService
 {
     private readonly IMachineRepository _machineRepository;
 
-    public MachineService(IMachineRepository machineRepository)
+    public ManageMachineUseCase(IMachineRepository machineRepository)
     {
         _machineRepository = machineRepository;
     }

@@ -1,11 +1,11 @@
 ﻿using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text;
-using Application.Interfaces;
 using LaunderWebApi.Entities;
-using Laundromat.Core.Interfaces;
 using LaunderWebApi.Infrastructure.Dao;
 using LaunderManagerWebApi.Domain.Services.InfrastructureServices;
+using LaunderManagerWebApi.Application.Interfaces;
+using LaunderManagerWebApi.Domain.InfrastructureServices;
 
 public class WebSocketServerMiddleWare
 {
@@ -84,7 +84,7 @@ public class WebSocketServerMiddleWare
             if (baseMessage.Type == "Notification")
             {
                 // Désérialisation en MachineStateDto pour une notification
-                var notification = JsonSerializer.Deserialize<MachineStateDto>(message);
+                var notification = JsonSerializer.Deserialize<MachineStatusDto>(message);
 
                 if (notification != null)
                 {
@@ -114,7 +114,7 @@ public class WebSocketServerMiddleWare
     }
 
     // Gestion des notifications
-    private async Task HandleNotificationAsync(MachineStateDto notification, IWebSocketService webSocketService, IMachineService machineService)
+    private async Task HandleNotificationAsync(MachineStatusDto notification, IWebSocketService webSocketService, IMachineService machineService)
     {
         if (notification.State == "Running")
         {

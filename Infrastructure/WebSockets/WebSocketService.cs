@@ -1,4 +1,4 @@
-﻿using Laundromat.Core.Interfaces;
+﻿using LaunderManagerWebApi.Domain.InfrastructureServices;
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;

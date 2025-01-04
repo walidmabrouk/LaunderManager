@@ -1,6 +1,6 @@
 ﻿using System.Threading.Tasks;
 
-namespace Application.Interfaces
+namespace LaunderManagerWebApi.Application.Interfaces
 {
     public interface IMachineService
     {

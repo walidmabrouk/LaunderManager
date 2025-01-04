@@ -1,6 +1,6 @@
-﻿using LaunderManagerWebApi.Domain.Services.InfrastructureServices;
+﻿using LaunderManagerWebApi.Domain.InfrastructureServices;
+using LaunderManagerWebApi.Domain.Services.InfrastructureServices;
 using LaunderWebApi.Entities;
-using Laundromat.Core.Interfaces;
 using System.Text.Json;
 
 namespace Laundromat.Application.UseCases
@@ -55,7 +55,7 @@ namespace Laundromat.Application.UseCases
                 {
                     throw new InvalidOperationException($"Error saving proprietor {proprietor.Name}.", ex);
                 }
-            }
+            } 
 
             // Diffuser la configuration via WebSocket
             try
