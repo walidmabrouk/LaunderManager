@@ -4,6 +4,8 @@ using System.Text;
 using Application.Interfaces;
 using LaunderWebApi.Entities;
 using Laundromat.Core.Interfaces;
+using LaunderWebApi.Infrastructure.Dao;
+using LaunderManagerWebApi.Domain.Services.InfrastructureServices;
 
 public class WebSocketServerMiddleWare
 {
@@ -24,13 +26,14 @@ public class WebSocketServerMiddleWare
             {
                 var webSocketService = scope.ServiceProvider.GetRequiredService<IWebSocketService>();
                 var machineService = scope.ServiceProvider.GetRequiredService<IMachineService>();
+                var proprietorDao = scope.ServiceProvider.GetRequiredService<IDaoProprietor>();
 
                 var socket = await context.WebSockets.AcceptWebSocketAsync();
                 string connectionId = webSocketService.AddSocket(socket);
 
                 try
                 {
-                    await ListenWebSocketAsync(socket, connectionId, webSocketService, machineService);
+                    await ListenWebSocketAsync(socket, connectionId, webSocketService, machineService, proprietorDao);
                 }
                 catch
                 {
@@ -44,7 +47,12 @@ public class WebSocketServerMiddleWare
         }
     }
 
-    private async Task ListenWebSocketAsync(WebSocket socket, string connectionId, IWebSocketService webSocketService, IMachineService machineService)
+    private async Task ListenWebSocketAsync(
+        WebSocket socket,
+        string connectionId,
+        IWebSocketService webSocketService,
+        IMachineService machineService,
+        IDaoProprietor proprietorDao)
     {
         var buffer = new byte[1024 * 4];
 
@@ -54,51 +62,48 @@ public class WebSocketServerMiddleWare
             if (result.MessageType == WebSocketMessageType.Text)
             {
                 string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                await ProcessMessageAsync(message, socket, connectionId, webSocketService, machineService);
+                await ProcessMessageAsync(message, socket, connectionId, webSocketService, machineService, proprietorDao);
             }
         }
     }
 
-    private async Task ProcessMessageAsync(string message, WebSocket socket, string connectionId, IWebSocketService webSocketService, IMachineService machineService)
+    private async Task ProcessMessageAsync(string message, WebSocket socket, string connectionId, IWebSocketService webSocketService, IMachineService machineService, IDaoProprietor proprietorDao)
     {
         try
         {
-            // Désérialiser le message reçu
-            var data = JsonSerializer.Deserialize<MachineStateDto>(message);
+            // Désérialiser le message reçu dans un objet générique
+            var baseMessage = JsonSerializer.Deserialize<BaseMessageDto>(message);
 
-            if (data != null)
+            if (baseMessage == null || string.IsNullOrEmpty(baseMessage.Type))
             {
-                // Vérifier le type de message
-                if (data.State == "Running")
-                {
-                    // Démarrage de la machine
-                    await machineService.UpdateMachineStateAsync(data.MachineId, "Running");
-                    await webSocketService.BroadcastMessageAsync($"Machine {data.MachineId} started");
-                    Console.WriteLine($"Machine {data.MachineId} started, state set to Running.");
-                }
-                else if (data.State == "Stopped")
-                {
-                    // Arrêt de la machine (ajouter les gains)
-                    await machineService.UpdateMachineStateAsync(data.MachineId, "Stopped");
+                await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Invalid message format", CancellationToken.None);
+                return;
+            }
 
-                    // Si vous avez un champ "price" dans l'objet reçu, vous pouvez l'utiliser
-                    if (data.Price.HasValue)
-                    {
-                        await machineService.AddCycleEarningsAsync(data.MachineId, data.Price.Value);
-                        await webSocketService.BroadcastMessageAsync($"Machine {data.MachineId} stopped, earnings added.");
-                        Console.WriteLine($"Machine {data.MachineId} stopped, added earnings: {data.Price}");
-                    }
-                    else
-                    {
-                        // Cas où le prix n'est pas passé (vous pouvez définir un comportement par défaut ici)
-                        await webSocketService.BroadcastMessageAsync($"Machine {data.MachineId} stopped, no earnings specified.");
-                        Console.WriteLine($"Machine {data.MachineId} stopped, no earnings specified.");
-                    }
-                }
-                else
+            // Gestion en fonction du type de message
+            if (baseMessage.Type == "Notification")
+            {
+                // Désérialisation en MachineStateDto pour une notification
+                var notification = JsonSerializer.Deserialize<MachineStateDto>(message);
+
+                if (notification != null)
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Invalid state", CancellationToken.None);
+                    await HandleNotificationAsync(notification, webSocketService, machineService);
                 }
+            }
+            else if (baseMessage.Type == "Configuration")
+            {
+                // Désérialisation en ProprietorDto pour une configuration
+                var configuration = JsonSerializer.Deserialize<Proprietor>(message);
+
+                if (configuration != null)
+                {
+                    await HandleConfigurationAsync(configuration, proprietorDao, webSocketService);
+                }
+            }
+            else
+            {
+                await socket.CloseAsync(WebSocketCloseStatus.InvalidPayloadData, "Unknown message type", CancellationToken.None);
             }
         }
         catch (Exception ex)
@@ -108,5 +113,55 @@ public class WebSocketServerMiddleWare
         }
     }
 
+    // Gestion des notifications
+    private async Task HandleNotificationAsync(MachineStateDto notification, IWebSocketService webSocketService, IMachineService machineService)
+    {
+        if (notification.State == "Running")
+        {
+            // Démarrage de la machine
+            await machineService.UpdateMachineStateAsync(notification.MachineId, "Running");
+            await webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} started");
+            Console.WriteLine($"Machine {notification.MachineId} started, state set to Running.");
+        }
+        else if (notification.State == "Stopped")
+        {
+            // Arrêt de la machine (ajouter les gains)
+            await machineService.UpdateMachineStateAsync(notification.MachineId, "Stopped");
 
+            if (notification.Price.HasValue)
+            {
+                await machineService.AddCycleEarningsAsync(notification.MachineId, notification.Price.Value);
+                await webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} stopped, earnings added.");
+                Console.WriteLine($"Machine {notification.MachineId} stopped, added earnings: {notification.Price}");
+            }
+            else
+            {
+                await webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} stopped, no earnings specified.");
+                Console.WriteLine($"Machine {notification.MachineId} stopped, no earnings specified.");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"Invalid state for notification: {notification.State}");
+        }
+    }
+
+    // Gestion des configurations
+    private async Task HandleConfigurationAsync(Proprietor configuration, IDaoProprietor proprietorDao, IWebSocketService webSocketService)
+    {
+        try
+        {
+            // Sauvegarde de la configuration dans la base de données via DAO
+            await proprietorDao.AddProprietor(configuration);
+
+            // Diffusion de la confirmation via WebSocket
+            Console.WriteLine($"Configuration saved for proprietor: {configuration.Name}");
+            await webSocketService.BroadcastMessageAsync($"Configuration saved for proprietor: {configuration.Name}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error saving configuration: {ex.Message}");
+            throw;
+        }
+    }
 }

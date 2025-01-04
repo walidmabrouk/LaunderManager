@@ -1,6 +1,8 @@
-﻿namespace LaunderWebApi.Entities
+﻿using System.Collections.Generic;
+
+namespace LaunderWebApi.Entities
 {
-    public class Proprietor
+    public class Proprietor : BaseMessageDto
     {
         public int Id { get; set; }
         public string Name { get; set; }

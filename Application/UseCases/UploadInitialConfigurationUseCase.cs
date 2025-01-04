@@ -23,30 +23,28 @@ namespace Laundromat.Application.UseCases
             if (configurationModel == null)
                 throw new ArgumentException("Configuration file cannot be empty.");
 
-            // Create a list of Proprietor from ConfigurationModel
             var proprietors = new List<Proprietor>
-    {
-        new Proprietor
-        {
-            Name = configurationModel.Name,
-            Email = configurationModel.Email,
-            TotalEarnings = configurationModel.TotalEarnings,
-            Laundries = configurationModel.Laundries
-        }
-    };
+            {
+                new Proprietor
+                {
+                    Name = configurationModel.Name,
+                    Email = configurationModel.Email,
+                    TotalEarnings = configurationModel.TotalEarnings,
+                    Laundries = configurationModel.Laundries
+                }
+            };
 
-            // Validation of the data before insertion
+            // Validation des données avant l'insertion
             foreach (var proprietor in proprietors)
             {
                 if (string.IsNullOrWhiteSpace(proprietor.Name) || string.IsNullOrWhiteSpace(proprietor.Email))
                     throw new ArgumentException("Proprietor name and email are required.");
 
-                // Additional validation can be added here for laundries or other fields
                 if (proprietor.Laundries == null || !proprietor.Laundries.Any())
                     throw new ArgumentException("At least one laundry is required for each proprietor.");
             }
 
-            // Save the proprietor to the database
+            // Sauvegarder dans la base de données
             foreach (var proprietor in proprietors)
             {
                 try
@@ -55,22 +53,20 @@ namespace Laundromat.Application.UseCases
                 }
                 catch (Exception ex)
                 {
-                    // Log the error or handle rollback as necessary
                     throw new InvalidOperationException($"Error saving proprietor {proprietor.Name}.", ex);
                 }
             }
 
-            // Broadcast the configuration via WebSocket
+            // Diffuser la configuration via WebSocket
             try
             {
-                var jsonConfiguration = JsonSerializer.Serialize(configurationModel); // Serialize the model to JSON
-                await _webSocketService.BroadcastMessageAsync(jsonConfiguration); // Send the message
+                var jsonConfiguration = JsonSerializer.Serialize(configurationModel);
+                await _webSocketService.BroadcastMessageAsync(jsonConfiguration);
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException("Error sending configuration to WebSocket.", ex);
             }
         }
-
     }
 }

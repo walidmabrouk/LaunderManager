@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LaunderManagerWebApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+99b7e1b1426935e63c7b430428c9685430592a8e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+958df754a5cfcfaa7eb517439570f7fba8046fe7")]
 [assembly: System.Reflection.AssemblyProductAttribute("LaunderManagerWebApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LaunderManagerWebApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

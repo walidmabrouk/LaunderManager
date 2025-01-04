@@ -2,8 +2,8 @@
 {
     public class Machine
     {
-        public int Id { get; set; } // ID principal
-        public int LaundryId { get; set; } // Liaison avec la laverie
+        public int Id { get; set; } 
+        public int LaundryId { get; set; } 
         public string SerialNumber { get; set; }
         public string Type { get; set; }
         public string State { get; set; }
