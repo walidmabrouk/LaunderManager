@@ -41,6 +41,8 @@ public class ManageNotificationUseCase : INotificationService
         await _machineRepository.UpdateMachineStateAsync(notification.MachineId, "Running");
 
         await _webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} started");
+        await _webSocketService.BroadcastMessageAsync(
+    System.Text.Json.JsonSerializer.Serialize(notification));
     }
 
     // Handle machine stopped event
@@ -53,6 +55,9 @@ public class ManageNotificationUseCase : INotificationService
             await _machineRepository.AddCycleEarningsAsync(notification.MachineId, notification.Price.Value);
 
             await _webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} stopped, earnings added");
+            await _webSocketService.BroadcastMessageAsync(
+    System.Text.Json.JsonSerializer.Serialize(notification));
+
         }
         else
         {
