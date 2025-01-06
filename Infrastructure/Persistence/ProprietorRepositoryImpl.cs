@@ -82,27 +82,75 @@ namespace LaunderWebApi.Infrastructure.Dao
 
         public async Task<int> AddProprietor(Proprietor proprietor)
         {
-            using var connection = _connectionManager.GetConnection();
-            using var transaction = connection.BeginTransaction();
-
             try
             {
-                const string proprietorQuery = @"
-            INSERT INTO Proprietors (Name, Email, TotalEarnings)
-            VALUES (@Name, @Email, @TotalEarnings);
-            SELECT CAST(SCOPE_IDENTITY() as int);
-        ";
+                using (var connection = _connectionManager.GetConnection())
+                using (var transaction = connection.BeginTransaction())
+                {
+                    // Add proprietor
+                    const string proprietorQuery = @"
+                INSERT INTO Proprietors (Name, Email, TotalEarnings)
+                VALUES (@Name, @Email, @TotalEarnings);
+                SELECT CAST(SCOPE_IDENTITY() as int);
+            ";
 
-                var proprietorId = await connection.QuerySingleAsync<int>(proprietorQuery, proprietor, transaction);
+                    Console.WriteLine($"Executing SQL: {proprietorQuery} with data: {proprietor.Name}, {proprietor.Email}, {proprietor.TotalEarnings}");
+                    var proprietorId = await connection.QuerySingleAsync<int>(proprietorQuery, proprietor, transaction);
+                    Console.WriteLine($"Proprietor added with Id: {proprietorId}");
 
-                // Process laundries, machines, and cycles here...
+                    foreach (var laundry in proprietor.Laundries)
+                    {
+                        laundry.ProprietorId = proprietorId;
 
-                transaction.Commit();
-                return proprietorId;
+                        const string laundryQuery = @"
+                    INSERT INTO Laundries (Name, Address, Earnings, ProprietorId)
+                    VALUES (@Name, @Address, @Earnings, @ProprietorId);
+                    SELECT CAST(SCOPE_IDENTITY() as int);
+                ";
+
+                        Console.WriteLine($"Executing SQL: {laundryQuery} with data: {laundry.Name}, {laundry.Address}, {laundry.Earnings}");
+                        var laundryId = await connection.QuerySingleAsync<int>(laundryQuery, laundry, transaction);
+                        Console.WriteLine($"Laundry added with Id: {laundryId}");
+
+                        foreach (var machine in laundry.Machines)
+                        {
+                            machine.LaundryId = laundryId;
+
+                            const string machineQuery = @"
+                        INSERT INTO Machines (SerialNumber, Type, State, Earnings, LaundryId)
+                        VALUES (@SerialNumber, @Type, @State, @Earnings, @LaundryId);
+                        SELECT CAST(SCOPE_IDENTITY() as int);
+                    ";
+
+                            Console.WriteLine($"Executing SQL: {machineQuery} with data: {machine.SerialNumber}, {machine.Type}, {machine.State}, {machine.Earnings}");
+                            var machineId = await connection.QuerySingleAsync<int>(machineQuery, machine, transaction);
+                            Console.WriteLine($"Machine added with Id: {machineId}");
+
+                            foreach (var cycle in machine.Cycles)
+                            {
+                                cycle.MachineId = machineId;
+
+                                const string cycleQuery = @"
+                            INSERT INTO Cycles (Name, Price, Duration, MachineId)
+                            VALUES (@Name, @Price, @Duration, @MachineId);
+                        ";
+
+                                Console.WriteLine($"Executing SQL: {cycleQuery} with data: {cycle.Name}, {cycle.Price}, {cycle.Duration}");
+                                await connection.ExecuteAsync(cycleQuery, cycle, transaction);
+                            }
+                        }
+                    }
+
+                    transaction.Commit();
+                    Console.WriteLine("Transaction committed successfully.");
+
+                    return proprietorId; // Return the newly added proprietor's ID
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                transaction.Rollback();
+                Console.Error.WriteLine($"An error occurred during AddProprietor: {ex.Message}");
+                Console.Error.WriteLine($"Failed SQL execution with proprietor data: {proprietor.Name}, {proprietor.Email}");
                 throw;
             }
         }
