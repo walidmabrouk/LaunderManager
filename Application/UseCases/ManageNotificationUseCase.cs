@@ -7,11 +7,13 @@ public class ManageNotificationUseCase : INotificationService
 {
     private readonly IMachineRepository _machineRepository;
     private readonly IWebSocketService _webSocketService;
+    private readonly IProprietorRepository _proprietorRepository;
 
-    public ManageNotificationUseCase(IMachineRepository machineRepository, IWebSocketService webSocketService)
+    public ManageNotificationUseCase(IMachineRepository machineRepository, IWebSocketService webSocketService, IProprietorRepository proprietorRepository)
     {
         _machineRepository = machineRepository ?? throw new ArgumentNullException(nameof(machineRepository));
         _webSocketService = webSocketService ?? throw new ArgumentNullException(nameof(webSocketService));
+        _proprietorRepository = proprietorRepository;
     }
 
     // Main entry point for processing state changes
@@ -39,10 +41,9 @@ public class ManageNotificationUseCase : INotificationService
     private async Task HandleMachineStartedAsync(MachineStatusDto notification)
     {
         await _machineRepository.UpdateMachineStateAsync(notification.MachineId, "Running");
-
-        await _webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} started");
+        var Data = await _proprietorRepository.GetAllProprietors();
         await _webSocketService.BroadcastMessageAsync(
-    System.Text.Json.JsonSerializer.Serialize(notification));
+System.Text.Json.JsonSerializer.Serialize(Data));
     }
 
     // Handle machine stopped event
@@ -53,15 +54,9 @@ public class ManageNotificationUseCase : INotificationService
         if (notification.Price.HasValue)
         {
             await _machineRepository.AddCycleEarningsAsync(notification.MachineId, notification.Price.Value);
-
-            await _webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} stopped, earnings added");
+            var Data = await _proprietorRepository.GetAllProprietors();
             await _webSocketService.BroadcastMessageAsync(
-    System.Text.Json.JsonSerializer.Serialize(notification));
-
-        }
-        else
-        {
-            await _webSocketService.BroadcastMessageAsync($"Machine {notification.MachineId} stopped, no earnings specified");
+    System.Text.Json.JsonSerializer.Serialize(Data));
         }
     }
 }

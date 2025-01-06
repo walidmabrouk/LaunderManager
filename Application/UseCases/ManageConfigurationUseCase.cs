@@ -30,8 +30,8 @@ public class ManageConfigurationUseCase : IConfigurationService
             ValidateConfiguration(configuration);
 
             var proprietorId = await _proprietorRepository.AddProprietor(configuration);
-            await _webSocketService.BroadcastMessageAsync($"Configuration saved for proprietor: {configuration.Name}");
-
+            await _webSocketService.BroadcastMessageAsync(
+       System.Text.Json.JsonSerializer.Serialize(configuration));
             _logger.LogInformation(
                 "Configuration added successfully for proprietor: {ProprietorName}",
                 configuration.Name);
@@ -100,11 +100,6 @@ public class ManageConfigurationUseCase : IConfigurationService
         {
             // Save configuration
             await AddConfigurationAsync(configuration);
-
-            // Notify via WebSocket
-            var confirmationMessage = $"Configuration saved for proprietor: {configuration.Name}";
-            await services.WebSocketService.BroadcastMessageAsync(confirmationMessage);
-
 
             // Retrieve and broadcast all configurations
             var allConfigurations = await GetAllConfigurationsAsync();

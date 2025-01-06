@@ -1,14 +1,19 @@
-﻿using System.Reflection.PortableExecutable;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection.PortableExecutable;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace LaunderWebApi.Entities
 {
     public class Laundry
     {
-        public int Id { get; set; } // ID principal
-        public int ProprietorId { get; set; } // Liaison avec le propriétaire
+        public int Id { get; set; }
+        public int ProprietorId { get; set; }
         public string Name { get; set; }
         public string Address { get; set; }
-        public decimal Earnings { get; set; }
-        public List<Machine> Machines { get; set; } = new List<Machine>();
+        public double Earnings { get; set; }
+        public List<Machine> Machines { get; set; }
     }
 }
