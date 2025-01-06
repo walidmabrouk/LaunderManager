@@ -5,17 +5,21 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using LaunderWebApi.Entities;
 using LaunderWebApi.Infrastructure.Dao;
+using LaunderManagerWebApi.Domain.InfrastructureServices;
 
 public class ManageConfigurationUseCase : IConfigurationService
 {
     private readonly IProprietorRepository _proprietorRepository;
+    private readonly IWebSocketService _webSocketService;
     private readonly ILogger<ManageConfigurationUseCase> _logger;
 
     public ManageConfigurationUseCase(
         IProprietorRepository proprietorRepository,
+        IWebSocketService webSocketService,
         ILogger<ManageConfigurationUseCase> logger)
     {
         _proprietorRepository = proprietorRepository ?? throw new ArgumentNullException(nameof(proprietorRepository));
+        _webSocketService = webSocketService ?? throw new ArgumentNullException(nameof(webSocketService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -26,6 +30,7 @@ public class ManageConfigurationUseCase : IConfigurationService
             ValidateConfiguration(configuration);
 
             var proprietorId = await _proprietorRepository.AddProprietor(configuration);
+            await _webSocketService.BroadcastMessageAsync($"Configuration saved for proprietor: {configuration.Name}");
 
             _logger.LogInformation(
                 "Configuration added successfully for proprietor: {ProprietorName}",
@@ -93,12 +98,19 @@ public class ManageConfigurationUseCase : IConfigurationService
     {
         try
         {
+            // Save configuration
             await AddConfigurationAsync(configuration);
 
+            // Notify via WebSocket
             var confirmationMessage = $"Configuration saved for proprietor: {configuration.Name}";
-            _logger.LogInformation(confirmationMessage);
-
             await services.WebSocketService.BroadcastMessageAsync(confirmationMessage);
+
+
+            // Retrieve and broadcast all configurations
+            var allConfigurations = await GetAllConfigurationsAsync();
+            var serializedConfigurations = System.Text.Json.JsonSerializer.Serialize(allConfigurations);
+            await services.WebSocketService.BroadcastMessageAsync(serializedConfigurations);
+
         }
         catch (Exception ex)
         {
@@ -106,4 +118,5 @@ public class ManageConfigurationUseCase : IConfigurationService
             throw;
         }
     }
+
 }
